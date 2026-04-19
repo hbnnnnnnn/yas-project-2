@@ -115,16 +115,14 @@ pipeline {
                         def svcPath = SERVICE_MAP[svcName]
 
                         if (BACKEND_SERVICES.contains(svcName) && fileExists("${svcPath}/pom.xml")) {
-                            dir(svcPath) {
-                                sh """
-                                    docker run --rm \
-                                      -v \"${WORKSPACE}\":/workspace \
-                                      -v \"${WORKSPACE}/.m2\":/workspace/.m2 \
-                                      -w /workspace/${svcPath} \
-                                      maven:3.9-eclipse-temurin-25 \
-                                      sh -lc 'if [ -f mvnw ]; then chmod +x mvnw || true; ./mvnw -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install; else mvn -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install; fi'
-                                """
-                            }
+                            sh """
+                                docker run --rm \
+                                  -v \"${WORKSPACE}\":/workspace \
+                                  -v \"${WORKSPACE}/.m2\":/root/.m2 \
+                                  -w /workspace \
+                                  maven:3.9-eclipse-temurin-25 \
+                                  sh -lc 'if [ -f ${svcPath}/mvnw ]; then chmod +x ${svcPath}/mvnw || true; ${svcPath}/mvnw -f pom.xml -B -DskipTests -pl ${svcPath} -am install; else mvn -f pom.xml -B -DskipTests -pl ${svcPath} -am install; fi'
+                            """
                         }
                     }
                 }
