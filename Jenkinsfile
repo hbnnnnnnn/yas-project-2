@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_USER  = 'hbnnn'
-        DOCKER_CREDS_ID  = 'dockerhub-creds'
+        DOCKER_HUB_USER = 'hbnnn'
+        DOCKER_CREDS_ID = 'dockerhub-creds'
     }
 
     stages {
@@ -12,8 +12,8 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    env.COMMIT_ID   = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.BRANCH_TAG  = env.BRANCH_NAME.replaceAll('/', '-')
+                    env.COMMIT_ID  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.BRANCH_TAG = env.BRANCH_NAME.replaceAll('/', '-')
                     echo "Commit: ${env.COMMIT_ID}  Branch: ${env.BRANCH_NAME}"
                 }
             }
@@ -22,17 +22,22 @@ pipeline {
         stage('Detect changed services') {
             steps {
                 script {
-                    def serviceMap = [
-                        'media'     : 'media',
-                        'product'   : 'product',
-                        'cart'      : 'cart',
-                        'order'     : 'order',
-                        'rating'    : 'rating',
-                        'customer'  : 'customer',
-                        'location'  : 'location',
-                        'inventory' : 'inventory',
-                        'tax'       : 'tax',
-                        'search'    : 'search',
+                    // Java backend services
+                    def javaServices = [
+                        'media'    : 'media',
+                        'product'  : 'product',
+                        'cart'     : 'cart',
+                        'order'    : 'order',
+                        'rating'   : 'rating',
+                        'customer' : 'customer',
+                        'location' : 'location',
+                        'inventory': 'inventory',
+                        'tax'      : 'tax',
+                        'search'   : 'search',
+                    ]
+
+                    // Next.js frontends (no Maven needed)
+                    def nodeServices = [
                         'storefront': 'storefront',
                         'backoffice': 'backoffice',
                     ]
@@ -42,51 +47,85 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    def toBuild = []
+                    def javaBuilds = []
+                    def nodeBuilds = []
 
                     if (changedFiles == '') {
                         echo "No previous commit to diff — building all services"
-                        toBuild = serviceMap.collect { k, v -> "${k}:${v}" }
+                        javaBuilds = javaServices.collect { k, v -> "${k}:${v}" }
+                        nodeBuilds = nodeServices.collect { k, v -> "${k}:${v}" }
                     } else {
-                        serviceMap.each { svcName, svcPath ->
+                        javaServices.each { svcName, svcPath ->
                             if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
-                                toBuild << "${svcName}:${svcPath}"
-                                echo "Changed: ${svcName}"
+                                javaBuilds << "${svcName}:${svcPath}"
+                                echo "Changed (Java): ${svcName}"
                             }
                         }
-                        if (toBuild.isEmpty()) {
+                        nodeServices.each { svcName, svcPath ->
+                            if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
+                                nodeBuilds << "${svcName}:${svcPath}"
+                                echo "Changed (Node): ${svcName}"
+                            }
+                        }
+                        if (javaBuilds.isEmpty() && nodeBuilds.isEmpty()) {
                             echo "No service folders changed — skipping build"
                         }
                     }
 
-                    env.SERVICES_TO_BUILD = toBuild.join('\n')
+                    env.JAVA_SERVICES = javaBuilds.join('\n')
+                    env.NODE_SERVICES = nodeBuilds.join('\n')
+                }
+            }
+        }
+
+        stage('Maven build') {
+            when {
+                expression { env.JAVA_SERVICES?.trim() != '' }
+            }
+            steps {
+                script {
+                    env.JAVA_SERVICES.trim().split('\n').each { entry ->
+                        def parts   = entry.split(':')
+                        def svcName = parts[0]
+                        def svcPath = parts[1]
+
+                        echo "Running mvn package for ${svcName}"
+                        sh """
+                            cd ${svcPath}
+                            mvn package -DskipTests --no-transfer-progress
+                        """
+                    }
                 }
             }
         }
 
         stage('Build & Push images') {
             when {
-                expression { env.SERVICES_TO_BUILD?.trim() != '' }
+                expression {
+                    (env.JAVA_SERVICES?.trim() != '') || (env.NODE_SERVICES?.trim() != '')
+                }
             }
             steps {
                 script {
-                    def services = env.SERVICES_TO_BUILD.trim().split('\n')
+                    def allServices = []
+                    if (env.JAVA_SERVICES?.trim()) {
+                        allServices += env.JAVA_SERVICES.trim().split('\n').toList()
+                    }
+                    if (env.NODE_SERVICES?.trim()) {
+                        allServices += env.NODE_SERVICES.trim().split('\n').toList()
+                    }
 
                     docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_CREDS_ID) {
-                        services.each { entry ->
+                        allServices.each { entry ->
                             def parts   = entry.split(':')
                             def svcName = parts[0]
                             def svcPath = parts[1]
                             def image   = "${env.DOCKER_HUB_USER}/${svcName}"
-                            def context = "./${svcPath}"
 
-                            echo "Building ${image}:${env.COMMIT_ID} from ${context}"
-
-                            def img = docker.build("${image}:${env.COMMIT_ID}", context)
-
+                            echo "Building ${image}:${env.COMMIT_ID} from ./${svcPath}"
+                            def img = docker.build("${image}:${env.COMMIT_ID}", "./${svcPath}")
                             img.push(env.COMMIT_ID)
                             img.push(env.BRANCH_TAG)
-
                             echo "Pushed ${image}:${env.COMMIT_ID} + :${env.BRANCH_TAG}"
                         }
                     }
