@@ -22,7 +22,6 @@ pipeline {
         stage('Detect changed services') {
             steps {
                 script {
-                    // Java backend services
                     def javaServices = [
                         'media'    : 'media',
                         'product'  : 'product',
@@ -35,8 +34,6 @@ pipeline {
                         'tax'      : 'tax',
                         'search'   : 'search',
                     ]
-
-                    // Next.js frontends (no Maven needed)
                     def nodeServices = [
                         'storefront': 'storefront',
                         'backoffice': 'backoffice',
@@ -75,6 +72,21 @@ pipeline {
                     env.JAVA_SERVICES = javaBuilds.join('\n')
                     env.NODE_SERVICES = nodeBuilds.join('\n')
                 }
+            }
+        }
+
+        // Install common-library + parent pom into local Maven repo
+        // so individual service builds can resolve internal dependencies
+        stage('Install common dependencies') {
+            when {
+                expression { env.JAVA_SERVICES?.trim() != '' }
+            }
+            steps {
+                sh '''
+                    mvn install -DskipTests --no-transfer-progress \
+                        --projects common-library \
+                        --also-make
+                '''
             }
         }
 
