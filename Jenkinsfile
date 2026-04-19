@@ -1,55 +1,26 @@
-def SERVICE_MAP = [
-    'media'     : 'media',
-    'product'   : 'product',
-    'cart'      : 'cart',
-    'order'     : 'order',
-    'rating'    : 'rating',
-    'customer'  : 'customer',
-    'location'  : 'location',
-    'inventory' : 'inventory',
-    'tax'       : 'tax',
-    'search'    : 'search',
-    'storefront': 'storefront',
-    'backoffice': 'backoffice',
-]
-
-def BACKEND_SERVICES = [
-    'media', 'product', 'cart', 'order', 'rating',
-    'customer', 'location', 'inventory', 'tax', 'search'
-]
-
-def getShortCommitHash() {
-    return sh(script: 'git rev-parse --short=8 HEAD || echo latest', returnStdout: true).trim()
-}
-
 pipeline {
     agent any
 
-    options {
-        skipDefaultCheckout(true)
-    }
-
     environment {
         DOCKER_HUB_USER = 'hbnnn'
-        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
+        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'   // credential ID set in Jenkins UI
         GIT_COMMIT_ID = ''
-        SERVICES_TO_BUILD = ''
     }
 
+    // All YAS backend services + frontend(s)
+    // Map: service param name -> path inside the repo
+    // Add/remove as needed to match your fork
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
                 script {
-                    def resolvedCommitId = getShortCommitHash()
-                    if (!resolvedCommitId) {
-                        resolvedCommitId = 'latest'
-                    }
-
-                    env.GIT_COMMIT_ID = resolvedCommitId.toString()
-                    writeFile file: '.ci_commit_id', text: "${resolvedCommitId}\n"
-
-                    echo "Commit ID: ${resolvedCommitId}"
+                    env.GIT_COMMIT_ID = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    echo "Commit ID: ${env.GIT_COMMIT_ID}"
                     echo "Branch: ${env.BRANCH_NAME}"
                 }
             }
@@ -58,73 +29,45 @@ pipeline {
         stage('Detect changed services') {
             steps {
                 script {
-                    def baseBranch = env.CHANGE_TARGET ?: 'main'
-                    def diffCommand = ''
+                    // Compare current commit against its parent to find changed dirs
+                    def changedFiles = sh(
+                        script: 'git diff --name-only HEAD~1 HEAD || git diff --name-only HEAD',
+                        returnStdout: true
+                    ).trim().split('\n')
 
-                    if (env.BRANCH_NAME == 'main') {
-                        def hasParent = sh(script: 'git rev-parse HEAD~1', returnStatus: true) == 0
-                        diffCommand = hasParent ? 'git diff --name-only HEAD~1 HEAD' : "git show --name-only --pretty='' HEAD"
-                    } else {
-                        sh "git fetch origin ${baseBranch}:refs/remotes/origin/${baseBranch} --depth=10"
-                        diffCommand = "git diff --name-only origin/${baseBranch} HEAD"
-                    }
+                    // Map of service name -> subfolder in repo
+                    def serviceMap = [
+                        'media'     : 'media',
+                        'product'   : 'product',
+                        'cart'      : 'cart',
+                        'order'     : 'order',
+                        'rating'    : 'rating',
+                        'customer'  : 'customer',
+                        'location'  : 'location',
+                        'inventory' : 'inventory',
+                        'tax'       : 'tax',
+                        'search'    : 'search',
+                        'storefront': 'storefront',   // Next.js frontend
+                        'backoffice': 'backoffice',   // Next.js backoffice
+                    ]
 
-                    def changedFilesRaw = sh(script: diffCommand, returnStdout: true).trim()
-                    def changedFiles = changedFilesRaw ? changedFilesRaw.readLines().findAll { it?.trim() } : []
-                    def servicesToBuild = [] as LinkedHashSet
-                    def isRootChanged = false
+                    def servicesToBuild = []
 
-                    changedFiles.each { file ->
-                        if (file == 'pom.xml' || file.startsWith('common-library/')) {
-                            isRootChanged = true
-                        }
-
-                        def topLevelDir = file.tokenize('/').first()
-                        if (topLevelDir && SERVICE_MAP.containsKey(topLevelDir)) {
-                            servicesToBuild << topLevelDir
-                        }
-                    }
-
-                    if (isRootChanged || servicesToBuild.isEmpty()) {
-                        echo isRootChanged ? 'Root/common-library changed, building all services.' : 'No specific service changed, building all services.'
-                        servicesToBuild = SERVICE_MAP.keySet() as LinkedHashSet
-                    }
-
-                    def servicesCsv = servicesToBuild.join(',')
-                    env.SERVICES_TO_BUILD = servicesCsv
-                    writeFile file: '.ci_services_to_build', text: "${servicesCsv}\n"
-                    echo "Services selected: ${servicesCsv}"
-                }
-            }
-        }
-
-        stage('Build service artifacts') {
-            steps {
-                script {
-                    def servicesText = fileExists('.ci_services_to_build') ? readFile('.ci_services_to_build').trim() : env.SERVICES_TO_BUILD?.trim()
-                    def selectedServices = servicesText
-                        ? servicesText.split(',').collect { it.trim() }.findAll { it }
-                        : (SERVICE_MAP.keySet() as List)
-
-                    selectedServices.each { svcName ->
-                        if (!SERVICE_MAP.containsKey(svcName)) {
-                            echo "Skipping unknown service key: ${svcName}"
-                            return
-                        }
-
-                        def svcPath = SERVICE_MAP[svcName]
-
-                        if (BACKEND_SERVICES.contains(svcName) && fileExists("${svcPath}/pom.xml")) {
-                            sh """
-                                docker run --rm \
-                                  -v \"${WORKSPACE}\":/workspace \
-                                  -v \"${WORKSPACE}/.m2\":/root/.m2 \
-                                  -w /workspace \
-                                  maven:3.9-eclipse-temurin-25 \
-                                  sh -lc 'if [ -f ${svcPath}/mvnw ]; then chmod +x ${svcPath}/mvnw || true; ${svcPath}/mvnw -f pom.xml -B -DskipTests -pl ${svcPath} -am install; else mvn -f pom.xml -B -DskipTests -pl ${svcPath} -am install; fi'
-                            """
+                    serviceMap.each { svcName, svcPath ->
+                        def affected = changedFiles.any { f -> f.startsWith("${svcPath}/") }
+                        if (affected) {
+                            servicesToBuild << [name: svcName, path: svcPath]
+                            echo "Will build: ${svcName}"
                         }
                     }
+
+                    // If nothing changed (e.g. first commit), build everything
+                    if (servicesToBuild.isEmpty()) {
+                        echo "No specific service changed — building all services"
+                        servicesToBuild = serviceMap.collect { k, v -> [name: k, path: v] }
+                    }
+
+                    env.SERVICES_JSON = groovy.json.JsonOutput.toJson(servicesToBuild)
                 }
             }
         }
@@ -132,44 +75,28 @@ pipeline {
         stage('Build & Push images') {
             steps {
                 script {
-                    def servicesText = fileExists('.ci_services_to_build') ? readFile('.ci_services_to_build').trim() : env.SERVICES_TO_BUILD?.trim()
-                    def selectedServices = servicesText
-                        ? servicesText.split(',').collect { it.trim() }.findAll { it }
-                        : (SERVICE_MAP.keySet() as List)
-
-                    def commitTag = env.GIT_COMMIT_ID?.trim()
-                    if (!commitTag && fileExists('.ci_commit_id')) {
-                        commitTag = readFile('.ci_commit_id').trim()
-                    }
-                    if (!commitTag) {
-                        commitTag = 'latest'
-                    }
+                    def services = new groovy.json.JsonSlurperClassic()
+                        .parseText(env.SERVICES_JSON)
 
                     docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_CREDENTIALS_ID) {
-                        selectedServices.each { svcName ->
-                            if (!SERVICE_MAP.containsKey(svcName)) {
-                                echo "Skipping unknown service key: ${svcName}"
-                                return
-                            }
+                        services.each { svc ->
+                            def imageName = "${env.DOCKER_HUB_USER}/${svc.name}"
+                            def tag       = env.GIT_COMMIT_ID
+                            def context   = "./${svc.path}"
 
-                            def svcPath = SERVICE_MAP[svcName]
-                            def dockerfilePath = "${svcPath}/Dockerfile"
+                            echo "Building ${imageName}:${tag} from ${context}"
 
-                            if (!fileExists(dockerfilePath)) {
-                                echo "Skipping ${svcName}: ${dockerfilePath} not found"
-                                return
-                            }
+                            // Build image
+                            def img = docker.build("${imageName}:${tag}", context)
 
-                            def imageName = "${env.DOCKER_HUB_USER}/${svcName}"
-                            def context = "./${svcPath}"
-                            def branchTag = (env.BRANCH_NAME ?: 'branch').replaceAll('/', '-')
+                            // Push commit-id tag
+                            img.push(tag)
 
-                            echo "Building ${imageName}:${commitTag} from ${context}"
-                            def img = docker.build("${imageName}:${commitTag}", context)
-                            img.push(commitTag)
+                            // Also update branch-named tag so latest of branch is trackable
+                            def branchTag = env.BRANCH_NAME.replaceAll('/', '-')
                             img.push(branchTag)
 
-                            echo "Pushed ${imageName}:${commitTag} and ${imageName}:${branchTag}"
+                            echo "Pushed ${imageName}:${tag} and ${imageName}:${branchTag}"
                         }
                     }
                 }
@@ -182,7 +109,7 @@ pipeline {
             echo "CI complete. Images pushed with tag: ${env.GIT_COMMIT_ID}"
         }
         failure {
-            echo 'CI failed. Check logs above.'
+            echo "CI failed. Check logs above."
         }
     }
 }
