@@ -75,38 +75,28 @@ pipeline {
             }
         }
 
-        // Install common-library + parent pom into local Maven repo
-        // so individual service builds can resolve internal dependencies
-        stage('Install common dependencies') {
-            when {
-                expression { env.JAVA_SERVICES?.trim() != '' }
-            }
-            steps {
-                sh '''
-                    mvn install -DskipTests --no-transfer-progress \
-                        --projects common-library \
-                        --also-make
-                '''
-            }
-        }
-
         stage('Maven build') {
             when {
                 expression { env.JAVA_SERVICES?.trim() != '' }
             }
             steps {
                 script {
-                    env.JAVA_SERVICES.trim().split('\n').each { entry ->
-                        def parts   = entry.split(':')
-                        def svcName = parts[0]
-                        def svcPath = parts[1]
-
-                        echo "Running mvn package for ${svcName}"
-                        sh """
-                            cd ${svcPath}
-                            mvn package -DskipTests --no-transfer-progress
-                        """
+                    // Collect module names (folder names = Maven module IDs in this repo)
+                    def moduleList = env.JAVA_SERVICES.trim().split('\n').collect { entry ->
+                        entry.split(':')[1]   // svcPath is the Maven module name
                     }
+
+                    // Build common-library + all changed services in one reactor call
+                    // --projects includes common-library so it's resolved from workspace
+                    // --also-make builds upstream deps automatically
+                    def projectsArg = (["common-library"] + moduleList).join(',')
+
+                    echo "Building modules: ${projectsArg}"
+                    sh """
+                        mvn package -DskipTests --no-transfer-progress \
+                            --projects ${projectsArg} \
+                            --also-make
+                    """
                 }
             }
         }
