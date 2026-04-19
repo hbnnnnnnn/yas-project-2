@@ -3,10 +3,10 @@ FROM jenkins/jenkins:lts-jdk21
 USER root
 
 # ----------------------------
-# 1. Install Docker CLI only
+# 1. Install Docker CLI + Maven
 # ----------------------------
 RUN apt-get update && \
-    apt-get install -y ca-certificates curl gnupg lsb-release && \
+    apt-get install -y ca-certificates curl gnupg lsb-release maven && \
     install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg \
       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
@@ -39,5 +39,4 @@ RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | b
 RUN groupadd -f docker && \
     usermod -aG docker jenkins
 
-# Switch back to Jenkins user
 USER jenkins
