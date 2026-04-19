@@ -117,12 +117,12 @@ pipeline {
                         if (BACKEND_SERVICES.contains(svcName) && fileExists("${svcPath}/pom.xml")) {
                             dir(svcPath) {
                                 if (fileExists('mvnw')) {
-                                    sh '''
+                                    sh """
                                         chmod +x mvnw || true
-                                        sh ./mvnw -B -DskipTests package
-                                    '''
+                                        sh ./mvnw -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install
+                                    """
                                 } else {
-                                    sh 'mvn -B -DskipTests package'
+                                    sh "mvn -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install"
                                 }
                             }
                         }
