@@ -116,14 +116,14 @@ pipeline {
 
                         if (BACKEND_SERVICES.contains(svcName) && fileExists("${svcPath}/pom.xml")) {
                             dir(svcPath) {
-                                if (fileExists('mvnw')) {
-                                    sh """
-                                        chmod +x mvnw || true
-                                        sh ./mvnw -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install
-                                    """
-                                } else {
-                                    sh "mvn -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install"
-                                }
+                                sh """
+                                    docker run --rm \
+                                      -v \"${WORKSPACE}\":/workspace \
+                                      -v \"${WORKSPACE}/.m2\":/workspace/.m2 \
+                                      -w /workspace/${svcPath} \
+                                      maven:3.9-eclipse-temurin-25 \
+                                      sh -lc 'if [ -f mvnw ]; then chmod +x mvnw || true; ./mvnw -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install; else mvn -f ../pom.xml -B -DskipTests -pl ${svcPath} -am install; fi'
+                                """
                             }
                         }
                     }
