@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         DOCKER_HUB_USER = 'hbnnn'
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'   // credential ID set in Jenkins UI
@@ -17,14 +21,13 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    env.GIT_COMMIT_ID = sh(
-                        script: 'git rev-parse --short HEAD',
+                    def commitId = sh(
+                        script: 'git rev-parse --short HEAD || echo latest',
                         returnStdout: true
                     ).trim()
 
-                    if (!env.GIT_COMMIT_ID?.trim()) {
-                        env.GIT_COMMIT_ID = 'latest'
-                    }
+                    env.GIT_COMMIT_ID = commitId ?: 'latest'
+                    writeFile file: '.ci_commit_id', text: env.GIT_COMMIT_ID
 
                     echo "Commit ID: ${env.GIT_COMMIT_ID}"
                     echo "Branch: ${env.BRANCH_NAME}"
@@ -74,7 +77,61 @@ pipeline {
                     }
 
                     env.SERVICES_TO_BUILD = servicesToBuild.join(',')
+                    writeFile file: '.ci_services_to_build', text: env.SERVICES_TO_BUILD
                     echo "Services selected: ${env.SERVICES_TO_BUILD}"
+                }
+            }
+        }
+
+        stage('Build service artifacts') {
+            steps {
+                script {
+                    def serviceMap = [
+                        'media'     : 'media',
+                        'product'   : 'product',
+                        'cart'      : 'cart',
+                        'order'     : 'order',
+                        'rating'    : 'rating',
+                        'customer'  : 'customer',
+                        'location'  : 'location',
+                        'inventory' : 'inventory',
+                        'tax'       : 'tax',
+                        'search'    : 'search',
+                        'storefront': 'storefront',
+                        'backoffice': 'backoffice',
+                    ]
+
+                    def servicesText = ''
+                    if (fileExists('.ci_services_to_build')) {
+                        servicesText = readFile('.ci_services_to_build').trim()
+                    }
+                    if (!servicesText && env.SERVICES_TO_BUILD?.trim()) {
+                        servicesText = env.SERVICES_TO_BUILD.trim()
+                    }
+
+                    def selectedServices = servicesText
+                        ? servicesText.split(',').collect { it.trim() }.findAll { it }
+                        : (serviceMap.keySet() as List)
+
+                    selectedServices.each { svcName ->
+                        if (!serviceMap.containsKey(svcName)) {
+                            echo "Skipping unknown service key: ${svcName}"
+                            return
+                        }
+
+                        def svcPath = serviceMap[svcName]
+
+                        // Java services need the jar in target/ before docker build COPY.
+                        if (fileExists("${svcPath}/pom.xml")) {
+                            dir(svcPath) {
+                                if (fileExists('mvnw')) {
+                                    sh './mvnw -B -DskipTests package'
+                                } else {
+                                    sh 'mvn -B -DskipTests package'
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -97,15 +154,24 @@ pipeline {
                         'backoffice': 'backoffice',
                     ]
 
-                    def selectedServices = []
-                    if (env.SERVICES_TO_BUILD?.trim()) {
-                        selectedServices = env.SERVICES_TO_BUILD.split(',')
-                            .collect { it.trim() }
-                            .findAll { it }
+                    def servicesText = ''
+                    if (fileExists('.ci_services_to_build')) {
+                        servicesText = readFile('.ci_services_to_build').trim()
+                    }
+                    if (!servicesText && env.SERVICES_TO_BUILD?.trim()) {
+                        servicesText = env.SERVICES_TO_BUILD.trim()
                     }
 
-                    if (selectedServices.isEmpty()) {
-                        selectedServices = serviceMap.keySet() as List
+                    def selectedServices = servicesText
+                        ? servicesText.split(',').collect { it.trim() }.findAll { it }
+                        : (serviceMap.keySet() as List)
+
+                    def commitTag = env.GIT_COMMIT_ID?.trim()
+                    if (!commitTag && fileExists('.ci_commit_id')) {
+                        commitTag = readFile('.ci_commit_id').trim()
+                    }
+                    if (!commitTag) {
+                        commitTag = 'latest'
                     }
 
                     docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_CREDENTIALS_ID) {
@@ -117,7 +183,7 @@ pipeline {
 
                             def svcPath   = serviceMap[svcName]
                             def imageName = "${env.DOCKER_HUB_USER}/${svcName}"
-                            def tag       = env.GIT_COMMIT_ID
+                            def tag       = commitTag
                             def context   = "./${svcPath}"
 
                             echo "Building ${imageName}:${tag} from ${context}"
