@@ -26,8 +26,13 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    env.GIT_COMMIT_ID = commitId ?: 'latest'
-                    writeFile file: '.ci_commit_id', text: env.GIT_COMMIT_ID
+                    def resolvedCommitId = (commitId ?: '').trim()
+                    if (!resolvedCommitId) {
+                        resolvedCommitId = 'latest'
+                    }
+
+                    env.GIT_COMMIT_ID = resolvedCommitId
+                    writeFile file: '.ci_commit_id', text: "${resolvedCommitId}\n"
 
                     echo "Commit ID: ${env.GIT_COMMIT_ID}"
                     echo "Branch: ${env.BRANCH_NAME}"
@@ -76,9 +81,10 @@ pipeline {
                         servicesToBuild = serviceMap.collect { k, v -> k }
                     }
 
-                    env.SERVICES_TO_BUILD = servicesToBuild.join(',')
-                    writeFile file: '.ci_services_to_build', text: env.SERVICES_TO_BUILD
-                    echo "Services selected: ${env.SERVICES_TO_BUILD}"
+                    def servicesCsv = servicesToBuild.join(',')
+                    env.SERVICES_TO_BUILD = servicesCsv
+                    writeFile file: '.ci_services_to_build', text: "${servicesCsv}\n"
+                    echo "Services selected: ${servicesCsv}"
                 }
             }
         }
