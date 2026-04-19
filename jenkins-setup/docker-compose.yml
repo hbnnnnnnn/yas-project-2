@@ -1,0 +1,38 @@
+services:
+  docker-dind:
+    image: docker:24.0.9-dind
+    container_name: docker-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - docker-data:/var/lib/docker
+    networks:
+      - jenkins-net
+
+  jenkins:
+    build: .
+    container_name: jenkins
+    depends_on:
+      - docker-dind
+    environment:
+      DOCKER_HOST: tcp://docker-dind:2375
+      DOCKER_TLS_CERTDIR: ""
+      KUBECONFIG: /var/jenkins_home/.kube/config
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - ~/.kube:/var/jenkins_home/.kube
+      - ~/.minikube:/Users/hbn/.minikube 
+    networks:
+      - jenkins-net
+
+volumes:
+  docker-data:
+  jenkins-home:
+
+networks:
+  jenkins-net:
+    driver: bridge
