@@ -43,7 +43,8 @@ pipeline {
                         'recommendation': 'recommendation',
                         'webhook'  : 'webhook',
                         'storefront-bff': 'storefront-bff',
-                        'backoffice-bff': 'backoffice-bff'
+                        'backoffice-bff': 'backoffice-bff',
+                        'sampledata': 'sampledata'
                     ]
                     def nodeServices = [
                         'storefront': 'storefront',

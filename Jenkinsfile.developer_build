@@ -17,7 +17,8 @@ def serviceMap = [
   'storefront'     : [chart: 'storefront-ui', image: 'storefront'],
   'backoffice'     : [chart: 'backoffice-ui', image: 'backoffice'],
   'storefront_bff' : [chart: 'storefront-bff', image: 'storefront-bff'],
-  'backoffice_bff' : [chart: 'backoffice-bff', image: 'backoffice-bff']
+  'backoffice_bff' : [chart: 'backoffice-bff', image: 'backoffice-bff'],
+  'sampledata'     : [chart: 'sampledata', image: 'sampledata']
 ]
 
 pipeline {
@@ -42,11 +43,12 @@ pipeline {
     string(name: 'BRANCH_backoffice',   defaultValue: 'main')
     string(name: 'BRANCH_storefront_bff', defaultValue: 'main')
     string(name: 'BRANCH_backoffice_bff', defaultValue: 'main')
+    string(name: 'BRANCH_sampledata',    defaultValue: 'main')
   }
   environment {
-    DOCKERHUB_USER = 'your-dockerhub-username'
-    YAS_REPO       = 'https://github.com/your-username/yas.git'
-    GITOPS_REPO    = 'https://github.com/your-org/gitops.git'
+    DOCKERHUB_USER = 'hbnnn'
+    YAS_REPO       = 'https://github.com/hbnnnnnnn/yas-project-2'
+    GITOPS_REPO    = 'https://github.com/hbnnnnnnn/yas-gitops'
   }
   stages {
     stage('Resolve image tags') {
