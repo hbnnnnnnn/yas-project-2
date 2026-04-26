@@ -45,6 +45,8 @@ pipeline {
                         'storefront': 'storefront',
                         'backoffice': 'backoffice',
                     ]
+                    def javaBuilds = []
+                    def nodeBuilds = []
 
                     if (params.BUILD_ALL) {
                         echo "BUILD_ALL=true → building all services"
@@ -56,9 +58,6 @@ pipeline {
                             script: 'git diff --name-only HEAD~1 HEAD 2>/dev/null || echo ""',
                             returnStdout: true
                         ).trim()
-
-                        def javaBuilds = []
-                        def nodeBuilds = []
 
                         if (changedFiles == '') {
                             echo "No previous commit to diff — building all services"
