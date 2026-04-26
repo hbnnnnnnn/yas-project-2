@@ -101,19 +101,35 @@ pipeline {
       }
     }
 
+    stage('Ensure Minikube') {
+      steps {
+        script {
+          sh '''
+            set +e
+            minikube status >/dev/null 2>&1
+            STATUS_RC=$?
+            set -e
+
+            if [ "$STATUS_RC" -ne 0 ]; then
+              echo "Minikube is not running. Starting Minikube with docker driver..."
+              minikube start --driver=docker --force --wait=all
+            fi
+
+            minikube status
+          '''
+        }
+      }
+    }
+
     stage('Print access info') {
       steps {
         script {
-          try {
-            def nodeIp = sh(script: 'minikube ip', returnStdout: true).trim()
-            echo "=============================="
-            echo "Add to /etc/hosts:"
-            echo "${nodeIp}  yas.local api.yas.local"
-            echo "ArgoCD syncing - check: minikube service argocd-server -n argocd --url"
-            echo "=============================="
-          } catch (Exception ex) {
-            echo 'Minikube is not available on this Jenkins agent. Skipping access info.'
-          }
+          def nodeIp = sh(script: 'minikube ip', returnStdout: true).trim()
+          echo "=============================="
+          echo "Add to /etc/hosts:"
+          echo "${nodeIp}  yas.local api.yas.local"
+          echo "ArgoCD syncing - check: minikube service argocd-server -n argocd --url"
+          echo "=============================="
         }
       }
     }
