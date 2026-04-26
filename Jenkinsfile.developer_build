@@ -78,8 +78,10 @@ pipeline {
               [chart: parts[0], image: parts[1], tag: parts[2]]
             }
 
-            sh "rm -rf gitops"  // clean any previous clone
-            sh "git clone https://${GH_USER}:${GH_PASS}@${GITOPS_REPO.replace('https://', '')} gitops"
+            sh 'rm -rf gitops'  // clean any previous clone
+            sh '''
+              git clone "https://${GH_USER}:${GH_PASS}@${GITOPS_REPO#https://}" gitops
+            '''
 
             dir('gitops') {
               entries.each { svc ->
@@ -102,12 +104,16 @@ pipeline {
     stage('Print access info') {
       steps {
         script {
-          def nodeIp = sh(script: "minikube ip", returnStdout: true).trim()
-          echo "=============================="
-          echo "Add to /etc/hosts:"
-          echo "${nodeIp}  yas.local api.yas.local"
-          echo "ArgoCD syncing — check: minikube service argocd-server -n argocd --url"
-          echo "=============================="
+          try {
+            def nodeIp = sh(script: 'minikube ip', returnStdout: true).trim()
+            echo "=============================="
+            echo "Add to /etc/hosts:"
+            echo "${nodeIp}  yas.local api.yas.local"
+            echo "ArgoCD syncing - check: minikube service argocd-server -n argocd --url"
+            echo "=============================="
+          } catch (Exception ex) {
+            echo 'Minikube is not available on this Jenkins agent. Skipping access info.'
+          }
         }
       }
     }

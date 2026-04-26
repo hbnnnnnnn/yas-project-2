@@ -25,7 +25,7 @@ services:
     volumes:
       - jenkins-home:/var/jenkins_home
       - ~/.kube:/var/jenkins_home/.kube
-      - ~/.minikube:/Users/hbn/.minikube 
+      - ~/.minikube:/var/jenkins_home/.minikube
     networks:
       - jenkins-net
 
