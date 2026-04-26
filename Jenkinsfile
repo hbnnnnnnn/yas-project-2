@@ -39,8 +39,6 @@ pipeline {
                         'search'   : 'search',
                         'payment'        : 'payment',
                         'payment-paypal' : 'payment-paypal',
-                        'identity' : 'identity',
-                        'delivery' : 'delivery',
                         'promotion': 'promotion',
                         'recommendation': 'recommendation',
                         'webhook'  : 'webhook',
@@ -89,32 +87,19 @@ pipeline {
                     }
                     env.JAVA_SERVICES = javaBuilds.join('\n')
                     env.NODE_SERVICES = nodeBuilds.join('\n')
+                    env.BUILD_REQUIRED = (!javaBuilds.isEmpty() || !nodeBuilds.isEmpty()).toString()
                 }
             }
         }
 
         stage('Maven build') {
             when {
-                expression { env.JAVA_SERVICES?.trim() != '' }
+                expression { env.BUILD_REQUIRED == 'true' }
             }
             steps {
                 script {
-                    // Collect module names (folder names = Maven module IDs in this repo)
-                    def moduleList = env.JAVA_SERVICES.trim().split('\n').collect { entry ->
-                        entry.split(':')[1]   // svcPath is the Maven module name
-                    }
-
-                    // Build common-library + all changed services in one reactor call
-                    // --projects includes common-library so it's resolved from workspace
-                    // --also-make builds upstream deps automatically
-                    def projectsArg = (["common-library"] + moduleList).join(',')
-
-                    echo "Building modules: ${projectsArg}"
-                    sh """
-                        mvn package -DskipTests --no-transfer-progress \
-                            --projects ${projectsArg} \
-                            --also-make
-                    """
+                    echo "Building full Maven reactor"
+                    sh "mvn package -DskipTests --no-transfer-progress"
                 }
             }
         }
@@ -142,11 +127,15 @@ pipeline {
                             def svcPath = parts[1]
                             def image   = "${env.DOCKER_HUB_USER}/${svcName}"
 
-                            echo "Building ${image}:${env.COMMIT_ID} from ./${svcPath}"
-                            def img = docker.build("${image}:${env.COMMIT_ID}", "./${svcPath}")
-                            img.push(env.COMMIT_ID)
-                            img.push(env.BRANCH_TAG)
-                            echo "Pushed ${image}:${env.COMMIT_ID} + :${env.BRANCH_TAG}"
+                            if (fileExists("${svcPath}/Dockerfile")) {
+                                echo "Building ${image}:${env.COMMIT_ID} from ./${svcPath}"
+                                def img = docker.build("${image}:${env.COMMIT_ID}", "./${svcPath}")
+                                img.push(env.COMMIT_ID)
+                                img.push(env.BRANCH_TAG)
+                                echo "Pushed ${image}:${env.COMMIT_ID} + :${env.BRANCH_TAG}"
+                            } else {
+                                echo "Skipping image build for ${svcName}: missing ${svcPath}/Dockerfile"
+                            }
                         }
                     }
                 }

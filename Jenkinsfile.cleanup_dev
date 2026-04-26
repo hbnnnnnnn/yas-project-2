@@ -14,7 +14,7 @@ pipeline {
               def services = [
                 'tax', 'product', 'cart', 'order', 'rating', 'customer',
                 'location', 'inventory', 'media', 'search', 'payment', 'payment-paypal',
-                'identity', 'delivery', 'promotion', 'recommendation', 'webhook',
+                'promotion', 'recommendation', 'webhook',
                 'storefront-ui', 'backoffice-ui', 'storefront-bff', 'backoffice-bff'
               ]
               services.each { chart ->

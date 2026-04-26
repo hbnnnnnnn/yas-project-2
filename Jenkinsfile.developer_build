@@ -13,8 +13,6 @@ pipeline {
     string(name: 'BRANCH_search',       defaultValue: 'main')
     string(name: 'BRANCH_payment',      defaultValue: 'main')
     string(name: 'BRANCH_payment_paypal', defaultValue: 'main')
-    string(name: 'BRANCH_identity',     defaultValue: 'main')
-    string(name: 'BRANCH_delivery',     defaultValue: 'main')
     string(name: 'BRANCH_promotion',    defaultValue: 'main')
     string(name: 'BRANCH_recommendation', defaultValue: 'main')
     string(name: 'BRANCH_webhook',      defaultValue: 'main')

@@ -24,7 +24,7 @@ pipeline {
           script {
             def services = ['tax','product','cart','order','rating','customer',
                             'location','inventory','media','search','payment','payment-paypal',
-                            'identity','delivery','promotion','recommendation','webhook',
+                            'promotion','recommendation','webhook',
                             'storefront','backoffice','storefront-bff','backoffice-bff']
             sh "docker login -u $DH_USER -p $DH_PASS"
             services.each { svc ->
