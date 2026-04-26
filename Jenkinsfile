@@ -38,6 +38,12 @@ pipeline {
                         'tax'      : 'tax',
                         'search'   : 'search',
                         'payment'        : 'payment',
+                        'payment-paypal' : 'payment-paypal',
+                        'identity' : 'identity',
+                        'delivery' : 'delivery',
+                        'promotion': 'promotion',
+                        'recommendation': 'recommendation',
+                        'webhook'  : 'webhook',
                         'storefront-bff': 'storefront-bff',
                         'backoffice-bff': 'backoffice-bff'
                     ]

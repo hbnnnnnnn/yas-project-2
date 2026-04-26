@@ -1,22 +1,3 @@
-// At the top of each Jenkinsfile, define a map instead of a plain list
-def serviceImageMap = [
-  'tax'            : 'tax',
-  'product'        : 'product',
-  'cart'           : 'cart',
-  'order'          : 'order',
-  'rating'         : 'rating',
-  'customer'       : 'customer',
-  'location'       : 'location',
-  'inventory'      : 'inventory',
-  'media'          : 'media',
-  'search'         : 'search',
-  'payment'        : 'payment',
-  'storefront-ui'  : 'storefront',   // chart name → image name
-  'backoffice-ui'  : 'backoffice',   // chart name → image name
-  'storefront-bff' : 'storefront-bff',
-  'backoffice-bff' : 'backoffice-bff'
-]
-
 pipeline {
   agent any
   environment {
@@ -42,7 +23,9 @@ pipeline {
             usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
           script {
             def services = ['tax','product','cart','order','rating','customer',
-                            'location','inventory','media','search','storefront','backoffice']
+                            'location','inventory','media','search','payment','payment-paypal',
+                            'identity','delivery','promotion','recommendation','webhook',
+                            'storefront','backoffice','storefront-bff','backoffice-bff']
             sh "docker login -u $DH_USER -p $DH_PASS"
             services.each { svc ->
               sh """

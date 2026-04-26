@@ -1,22 +1,3 @@
-// At the top of each Jenkinsfile, define a map instead of a plain list
-def serviceImageMap = [
-  'tax'            : 'tax',
-  'product'        : 'product',
-  'cart'           : 'cart',
-  'order'          : 'order',
-  'rating'         : 'rating',
-  'customer'       : 'customer',
-  'location'       : 'location',
-  'inventory'      : 'inventory',
-  'media'          : 'media',
-  'search'         : 'search',
-  'payment'        : 'payment',
-  'storefront-ui'  : 'storefront',   // chart name → image name
-  'backoffice-ui'  : 'backoffice',   // chart name → image name
-  'storefront-bff' : 'storefront-bff',
-  'backoffice-bff' : 'backoffice-bff'
-]
-
 pipeline {
   agent any
   environment {
