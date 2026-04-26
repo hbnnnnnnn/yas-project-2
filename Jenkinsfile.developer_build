@@ -1,0 +1,87 @@
+pipeline {
+  agent any
+  parameters {
+    string(name: 'BRANCH_tax',          defaultValue: 'main')
+    string(name: 'BRANCH_product',      defaultValue: 'main')
+    string(name: 'BRANCH_cart',         defaultValue: 'main')
+    string(name: 'BRANCH_order',        defaultValue: 'main')
+    string(name: 'BRANCH_rating',       defaultValue: 'main')
+    string(name: 'BRANCH_customer',     defaultValue: 'main')
+    string(name: 'BRANCH_location',     defaultValue: 'main')
+    string(name: 'BRANCH_inventory',    defaultValue: 'main')
+    string(name: 'BRANCH_media',        defaultValue: 'main')
+    string(name: 'BRANCH_search',       defaultValue: 'main')
+    string(name: 'BRANCH_payment',      defaultValue: 'main')
+    string(name: 'BRANCH_storefront',   defaultValue: 'main')
+    string(name: 'BRANCH_backoffice',   defaultValue: 'main')
+    string(name: 'BRANCH_storefront_bff', defaultValue: 'main')
+    string(name: 'BRANCH_backoffice_bff', defaultValue: 'main')
+  }
+  environment {
+    DOCKERHUB_USER = 'your-dockerhub-username'
+    YAS_REPO       = 'https://github.com/your-username/yas.git'
+    GITOPS_REPO    = 'https://github.com/your-org/gitops.git'
+  }
+  stages {
+    stage('Resolve image tags') {
+    steps {
+        script {
+        env.RESOLVED = serviceMap.collect { paramName, info ->
+            def branch = params["BRANCH_${paramName}"]
+            // CI pushes branch name as tag (with / replaced by -)
+            // so 'dev_tax_service' branch → tag 'dev_tax_service'
+            // and 'main' branch → tag 'main'
+            def tag = branch.replaceAll('/', '-')
+            echo "${paramName}: branch=${branch} → tag=${tag}"
+            "${info.chart}|${info.image}|${tag}"
+        }.join(',')
+        }
+    }
+    }
+
+    stage('Update GitOps repo') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-creds',
+            usernameVariable: 'GH_USER', passwordVariable: 'GH_PASS')]) {
+          script {
+            // Parse the resolved string from previous stage
+            def entries = env.RESOLVED.split(',').collect { entry ->
+              def parts = entry.split('\\|')
+              [chart: parts[0], image: parts[1], tag: parts[2]]
+            }
+
+            sh "rm -rf gitops"  // clean any previous clone
+            sh "git clone https://${GH_USER}:${GH_PASS}@${GITOPS_REPO.replace('https://', '')} gitops"
+
+            dir('gitops') {
+              entries.each { svc ->
+                sh "yq e -i '.backend.image.repository = \"${DOCKERHUB_USER}/${svc.image}\"' dev/${svc.chart}.values.yaml"
+                sh "yq e -i '.backend.image.tag = \"${svc.tag}\"' dev/${svc.chart}.values.yaml"
+              }
+              sh """
+                git config user.email "jenkins@ci"
+                git config user.name "Jenkins"
+                git add dev/
+                git diff --staged --quiet || git commit -m "dev: update tags from developer_build [skip ci]"
+                git push
+              """
+            }
+          }
+        }
+      }
+    }
+
+    stage('Print access info') {
+      steps {
+        script {
+          def nodeIp = sh(script: "minikube ip", returnStdout: true).trim()
+          echo "=============================="
+          echo "Add to /etc/hosts:"
+          echo "${nodeIp}  yas.local api.yas.local"
+          echo "ArgoCD syncing — check: minikube service argocd-server -n argocd --url"
+          echo "=============================="
+        }
+      }
+    }
+  }
+}

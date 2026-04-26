@@ -1,0 +1,52 @@
+// At the top of each Jenkinsfile, define a map instead of a plain list
+def serviceImageMap = [
+  'tax'            : 'tax',
+  'product'        : 'product',
+  'cart'           : 'cart',
+  'order'          : 'order',
+  'rating'         : 'rating',
+  'customer'       : 'customer',
+  'location'       : 'location',
+  'inventory'      : 'inventory',
+  'media'          : 'media',
+  'search'         : 'search',
+  'payment'        : 'payment',
+  'storefront-ui'  : 'storefront',   // chart name → image name
+  'backoffice-ui'  : 'backoffice',   // chart name → image name
+  'storefront-bff' : 'storefront-bff',
+  'backoffice-bff' : 'backoffice-bff'
+]
+
+pipeline {
+  agent any
+  environment {
+    DOCKERHUB_USER = 'your-dockerhub-username'
+  }
+  triggers {
+    githubPush()   // fires when main branch gets a push
+  }
+  stages {
+    stage('Update GitOps repo') {
+    steps {
+        withCredentials([usernamePassword(credentialsId: 'github-creds',
+            usernameVariable: 'GH_USER', passwordVariable: 'GH_PASS')]) {
+        script {
+            sh "git clone https://${GH_USER}:${GH_PASS}@github.com/your-org/gitops.git"
+            dir('gitops') {
+            serviceImageMap.each { chartName, imageName ->
+                sh "yq e -i '.backend.image.repository = \"${DOCKERHUB_USER}/${imageName}\"' dev/${chartName}.values.yaml"
+                sh "yq e -i '.backend.image.tag = \"main\"' dev/${chartName}.values.yaml"
+            }
+            sh """
+                git config user.email "jenkins@ci"
+                git config user.name "Jenkins"
+                git add dev/
+                git commit -m "dev: sync all to main [skip ci]"
+                git push
+            """
+            }
+        }
+        }
+    }
+    }
+}

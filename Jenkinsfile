@@ -6,6 +6,10 @@ pipeline {
         DOCKER_CREDS_ID = 'dockerhub-creds'
     }
 
+    parameters {
+        booleanParam(name: 'BUILD_ALL', defaultValue: false, description: 'Force build all services')
+    }
+
     stages {
 
         stage('Checkout') {
@@ -33,42 +37,51 @@ pipeline {
                         'inventory': 'inventory',
                         'tax'      : 'tax',
                         'search'   : 'search',
+                        'payment'        : 'payment',
+                        'storefront-bff': 'storefront-bff',
+                        'backoffice-bff': 'backoffice-bff'
                     ]
                     def nodeServices = [
                         'storefront': 'storefront',
                         'backoffice': 'backoffice',
                     ]
 
-                    def changedFiles = sh(
-                        script: 'git diff --name-only HEAD~1 HEAD 2>/dev/null || echo ""',
-                        returnStdout: true
-                    ).trim()
-
-                    def javaBuilds = []
-                    def nodeBuilds = []
-
-                    if (changedFiles == '') {
-                        echo "No previous commit to diff — building all services"
+                    if (params.BUILD_ALL) {
+                        echo "BUILD_ALL=true → building all services"
                         javaBuilds = javaServices.collect { k, v -> "${k}:${v}" }
                         nodeBuilds = nodeServices.collect { k, v -> "${k}:${v}" }
+
                     } else {
-                        javaServices.each { svcName, svcPath ->
-                            if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
-                                javaBuilds << "${svcName}:${svcPath}"
-                                echo "Changed (Java): ${svcName}"
+                        def changedFiles = sh(
+                            script: 'git diff --name-only HEAD~1 HEAD 2>/dev/null || echo ""',
+                            returnStdout: true
+                        ).trim()
+
+                        def javaBuilds = []
+                        def nodeBuilds = []
+
+                        if (changedFiles == '') {
+                            echo "No previous commit to diff — building all services"
+                            javaBuilds = javaServices.collect { k, v -> "${k}:${v}" }
+                            nodeBuilds = nodeServices.collect { k, v -> "${k}:${v}" }
+                        } else {
+                            javaServices.each { svcName, svcPath ->
+                                if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
+                                    javaBuilds << "${svcName}:${svcPath}"
+                                    echo "Changed (Java): ${svcName}"
+                                }
                             }
-                        }
-                        nodeServices.each { svcName, svcPath ->
-                            if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
-                                nodeBuilds << "${svcName}:${svcPath}"
-                                echo "Changed (Node): ${svcName}"
+                            nodeServices.each { svcName, svcPath ->
+                                if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
+                                    nodeBuilds << "${svcName}:${svcPath}"
+                                    echo "Changed (Node): ${svcName}"
+                                }
                             }
-                        }
-                        if (javaBuilds.isEmpty() && nodeBuilds.isEmpty()) {
-                            echo "No service folders changed — skipping build"
+                            if (javaBuilds.isEmpty() && nodeBuilds.isEmpty()) {
+                                echo "No service folders changed — skipping build"
+                            }
                         }
                     }
-
                     env.JAVA_SERVICES = javaBuilds.join('\n')
                     env.NODE_SERVICES = nodeBuilds.join('\n')
                 }

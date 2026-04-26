@@ -1,0 +1,20 @@
+// Jenkinsfile.cleanup_dev
+pipeline {
+  agent any
+  stages {
+    stage('Delete dev deployments') {
+      steps {
+        withKubeConfig([credentialsId: 'kubeconfig-minikube']) {
+          sh '''
+            helm list -n dev --short | xargs -r -I{} helm uninstall {} -n dev
+          '''
+        }
+      }
+    }
+  }
+  post {
+    success {
+      echo "All dev deployments removed."
+    }
+  }
+}
