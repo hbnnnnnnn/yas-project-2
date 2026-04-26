@@ -1,0 +1,39 @@
+// Jenkinsfile.cleanup_dev
+pipeline {
+  agent any
+  stages {
+    stage('Cleanup dev namespace') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-creds',
+            usernameVariable: 'GH_USER', passwordVariable: 'GH_PASS')]) {
+          script {
+            sh "rm -rf yas-gitops"
+            sh "git clone https://${GH_USER}:${GH_PASS}@github.com/your-org/yas-gitops.git yas-gitops"
+            dir('yas-gitops') {
+              // Reset all dev tags back to main
+              def services = [
+                'tax', 'product', 'cart', 'order', 'rating', 'customer',
+                'location', 'inventory', 'media', 'search', 'payment', 'payment-paypal',
+                'promotion', 'recommendation', 'webhook',
+                'storefront-ui', 'backoffice-ui', 'storefront-bff', 'backoffice-bff'
+              ]
+              services.each { chart ->
+                sh "yq e -i '.backend.image.tag = \"main\"' dev/${chart}.values.yaml"
+              }
+              sh """
+                git config user.email "jenkins@ci"
+                git config user.name "Jenkins"
+                git add dev/
+                git diff --staged --quiet || git commit -m "cleanup: reset dev to main [skip ci]"
+                git push
+              """
+            }
+          }
+        }
+      }
+    }
+  }
+  post {
+    success { echo "Dev namespace reset to main — ArgoCD will sync automatically" }
+  }
+}

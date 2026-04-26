@@ -1,36 +1,24 @@
 pipeline {
     agent any
 
-    options {
-        skipDefaultCheckout(true)
-    }
-
     environment {
         DOCKER_HUB_USER = 'hbnnn'
-        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'   // credential ID set in Jenkins UI
-        GIT_COMMIT_ID = ''
-        SERVICES_TO_BUILD = ''
+        DOCKER_CREDS_ID = 'dockerhub-creds'
     }
 
-    // All YAS backend services + frontend(s)
-    // Map: service param name -> path inside the repo
-    // Add/remove as needed to match your fork
+    parameters {
+        booleanParam(name: 'BUILD_ALL', defaultValue: false, description: 'Force build all services')
+    }
+
     stages {
 
         stage('Checkout') {
             steps {
                 checkout scm
                 script {
-                    def commitId = sh(
-                        script: 'git rev-parse --short HEAD || echo latest',
-                        returnStdout: true
-                    ).trim()
-
-                    env.GIT_COMMIT_ID = commitId ?: 'latest'
-                    writeFile file: '.ci_commit_id', text: env.GIT_COMMIT_ID
-
-                    echo "Commit ID: ${env.GIT_COMMIT_ID}"
-                    echo "Branch: ${env.BRANCH_NAME}"
+                    env.COMMIT_ID  = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.BRANCH_TAG = env.BRANCH_NAME.replaceAll('/', '-')
+                    echo "Commit: ${env.COMMIT_ID}  Branch: ${env.BRANCH_NAME}"
                 }
             }
         }
@@ -38,167 +26,117 @@ pipeline {
         stage('Detect changed services') {
             steps {
                 script {
-                    // Compare current commit against its parent to find changed dirs
-                    def changedFiles = sh(
-                        script: 'git diff --name-only HEAD~1 HEAD || git diff --name-only HEAD',
-                        returnStdout: true
-                    ).trim().split('\n')
-
-                    // Map of service name -> subfolder in repo
-                    def serviceMap = [
-                        'media'     : 'media',
-                        'product'   : 'product',
-                        'cart'      : 'cart',
-                        'order'     : 'order',
-                        'rating'    : 'rating',
-                        'customer'  : 'customer',
-                        'location'  : 'location',
-                        'inventory' : 'inventory',
-                        'tax'       : 'tax',
-                        'search'    : 'search',
-                        'storefront': 'storefront',   // Next.js frontend
-                        'backoffice': 'backoffice',   // Next.js backoffice
+                    def javaServices = [
+                        'media'    : 'media',
+                        'product'  : 'product',
+                        'cart'     : 'cart',
+                        'order'    : 'order',
+                        'rating'   : 'rating',
+                        'customer' : 'customer',
+                        'location' : 'location',
+                        'inventory': 'inventory',
+                        'tax'      : 'tax',
+                        'search'   : 'search',
+                        'payment'        : 'payment',
+                        'payment-paypal' : 'payment-paypal',
+                        'promotion': 'promotion',
+                        'recommendation': 'recommendation',
+                        'webhook'  : 'webhook',
+                        'storefront-bff': 'storefront-bff',
+                        'backoffice-bff': 'backoffice-bff',
+                        'sampledata': 'sampledata'
                     ]
+                    def nodeServices = [
+                        'storefront': 'storefront',
+                        'backoffice': 'backoffice',
+                    ]
+                    def javaBuilds = []
+                    def nodeBuilds = []
 
-                    def servicesToBuild = []
+                    if (params.BUILD_ALL) {
+                        echo "BUILD_ALL=true → building all services"
+                        javaBuilds = javaServices.collect { k, v -> "${k}:${v}" }
+                        nodeBuilds = nodeServices.collect { k, v -> "${k}:${v}" }
 
-                    serviceMap.each { svcName, svcPath ->
-                        def affected = changedFiles.any { f -> f.startsWith("${svcPath}/") }
-                        if (affected) {
-                            servicesToBuild << svcName
-                            echo "Will build: ${svcName}"
+                    } else {
+                        def changedFiles = sh(
+                            script: 'git diff --name-only HEAD~1 HEAD 2>/dev/null || echo ""',
+                            returnStdout: true
+                        ).trim()
+
+                        if (changedFiles == '') {
+                            echo "No previous commit to diff — building all services"
+                            javaBuilds = javaServices.collect { k, v -> "${k}:${v}" }
+                            nodeBuilds = nodeServices.collect { k, v -> "${k}:${v}" }
+                        } else {
+                            javaServices.each { svcName, svcPath ->
+                                if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
+                                    javaBuilds << "${svcName}:${svcPath}"
+                                    echo "Changed (Java): ${svcName}"
+                                }
+                            }
+                            nodeServices.each { svcName, svcPath ->
+                                if (changedFiles.split('\n').any { it.startsWith("${svcPath}/") }) {
+                                    nodeBuilds << "${svcName}:${svcPath}"
+                                    echo "Changed (Node): ${svcName}"
+                                }
+                            }
+                            if (javaBuilds.isEmpty() && nodeBuilds.isEmpty()) {
+                                echo "No service folders changed — skipping build"
+                            }
                         }
                     }
-
-                    // If nothing changed (e.g. first commit), build everything
-                    if (servicesToBuild.isEmpty()) {
-                        echo "No specific service changed — building all services"
-                        servicesToBuild = serviceMap.collect { k, v -> k }
-                    }
-
-                    env.SERVICES_TO_BUILD = servicesToBuild.join(',')
-                    writeFile file: '.ci_services_to_build', text: env.SERVICES_TO_BUILD
-                    echo "Services selected: ${env.SERVICES_TO_BUILD}"
+                    env.JAVA_SERVICES = javaBuilds.join('\n')
+                    env.NODE_SERVICES = nodeBuilds.join('\n')
+                    env.BUILD_REQUIRED = (!javaBuilds.isEmpty() || !nodeBuilds.isEmpty()).toString()
                 }
             }
         }
 
-        stage('Build service artifacts') {
+        stage('Maven build') {
+            when {
+                expression { env.BUILD_REQUIRED == 'true' }
+            }
             steps {
                 script {
-                    def serviceMap = [
-                        'media'     : 'media',
-                        'product'   : 'product',
-                        'cart'      : 'cart',
-                        'order'     : 'order',
-                        'rating'    : 'rating',
-                        'customer'  : 'customer',
-                        'location'  : 'location',
-                        'inventory' : 'inventory',
-                        'tax'       : 'tax',
-                        'search'    : 'search',
-                        'storefront': 'storefront',
-                        'backoffice': 'backoffice',
-                    ]
-
-                    def servicesText = ''
-                    if (fileExists('.ci_services_to_build')) {
-                        servicesText = readFile('.ci_services_to_build').trim()
-                    }
-                    if (!servicesText && env.SERVICES_TO_BUILD?.trim()) {
-                        servicesText = env.SERVICES_TO_BUILD.trim()
-                    }
-
-                    def selectedServices = servicesText
-                        ? servicesText.split(',').collect { it.trim() }.findAll { it }
-                        : (serviceMap.keySet() as List)
-
-                    selectedServices.each { svcName ->
-                        if (!serviceMap.containsKey(svcName)) {
-                            echo "Skipping unknown service key: ${svcName}"
-                            return
-                        }
-
-                        def svcPath = serviceMap[svcName]
-
-                        // Java services need the jar in target/ before docker build COPY.
-                        if (fileExists("${svcPath}/pom.xml")) {
-                            dir(svcPath) {
-                                if (fileExists('mvnw')) {
-                                    sh './mvnw -B -DskipTests package'
-                                } else {
-                                    sh 'mvn -B -DskipTests package'
-                                }
-                            }
-                        }
-                    }
+                    echo "Building full Maven reactor"
+                    sh "mvn package -DskipTests --no-transfer-progress"
                 }
             }
         }
 
         stage('Build & Push images') {
+            when {
+                expression {
+                    (env.JAVA_SERVICES?.trim() != '') || (env.NODE_SERVICES?.trim() != '')
+                }
+            }
             steps {
                 script {
-                    def serviceMap = [
-                        'media'     : 'media',
-                        'product'   : 'product',
-                        'cart'      : 'cart',
-                        'order'     : 'order',
-                        'rating'    : 'rating',
-                        'customer'  : 'customer',
-                        'location'  : 'location',
-                        'inventory' : 'inventory',
-                        'tax'       : 'tax',
-                        'search'    : 'search',
-                        'storefront': 'storefront',
-                        'backoffice': 'backoffice',
-                    ]
-
-                    def servicesText = ''
-                    if (fileExists('.ci_services_to_build')) {
-                        servicesText = readFile('.ci_services_to_build').trim()
+                    def allServices = []
+                    if (env.JAVA_SERVICES?.trim()) {
+                        allServices += env.JAVA_SERVICES.trim().split('\n').toList()
                     }
-                    if (!servicesText && env.SERVICES_TO_BUILD?.trim()) {
-                        servicesText = env.SERVICES_TO_BUILD.trim()
+                    if (env.NODE_SERVICES?.trim()) {
+                        allServices += env.NODE_SERVICES.trim().split('\n').toList()
                     }
 
-                    def selectedServices = servicesText
-                        ? servicesText.split(',').collect { it.trim() }.findAll { it }
-                        : (serviceMap.keySet() as List)
+                    docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_CREDS_ID) {
+                        allServices.each { entry ->
+                            def parts   = entry.split(':')
+                            def svcName = parts[0]
+                            def svcPath = parts[1]
+                            def image   = "${env.DOCKER_HUB_USER}/${svcName}"
 
-                    def commitTag = env.GIT_COMMIT_ID?.trim()
-                    if (!commitTag && fileExists('.ci_commit_id')) {
-                        commitTag = readFile('.ci_commit_id').trim()
-                    }
-                    if (!commitTag) {
-                        commitTag = 'latest'
-                    }
-
-                    docker.withRegistry('https://index.docker.io/v1/', env.DOCKER_CREDENTIALS_ID) {
-                        selectedServices.each { svcName ->
-                            if (!serviceMap.containsKey(svcName)) {
-                                echo "Skipping unknown service key: ${svcName}"
-                                return
+                            if (fileExists("${svcPath}/Dockerfile")) {
+                                echo "Building ${image}:${env.COMMIT_ID} from ./${svcPath}"
+                                def img = docker.build("${image}:${env.COMMIT_ID}", "./${svcPath}")
+                                img.push(env.COMMIT_ID)
+                                img.push(env.BRANCH_TAG)
+                                echo "Pushed ${image}:${env.COMMIT_ID} + :${env.BRANCH_TAG}"
+                            } else {
+                                echo "Skipping image build for ${svcName}: missing ${svcPath}/Dockerfile"
                             }
-
-                            def svcPath   = serviceMap[svcName]
-                            def imageName = "${env.DOCKER_HUB_USER}/${svcName}"
-                            def tag       = commitTag
-                            def context   = "./${svcPath}"
-
-                            echo "Building ${imageName}:${tag} from ${context}"
-
-                            // Build image
-                            def img = docker.build("${imageName}:${tag}", context)
-
-                            // Push commit-id tag
-                            img.push(tag)
-
-                            // Also update branch-named tag so latest of branch is trackable
-                            def branchTag = env.BRANCH_NAME.replaceAll('/', '-')
-                            img.push(branchTag)
-
-                            echo "Pushed ${imageName}:${tag} and ${imageName}:${branchTag}"
                         }
                     }
                 }
@@ -207,11 +145,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo "CI complete. Images pushed with tag: ${env.GIT_COMMIT_ID}"
-        }
-        failure {
-            echo "CI failed. Check logs above."
-        }
+        success { echo "CI done. Tag: ${env.COMMIT_ID}" }
+        failure { echo "CI failed — see logs above." }
     }
 }
