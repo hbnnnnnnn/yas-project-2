@@ -1,3 +1,25 @@
+def serviceMap = [
+  'tax'            : [chart: 'tax', image: 'tax'],
+  'product'        : [chart: 'product', image: 'product'],
+  'cart'           : [chart: 'cart', image: 'cart'],
+  'order'          : [chart: 'order', image: 'order'],
+  'rating'         : [chart: 'rating', image: 'rating'],
+  'customer'       : [chart: 'customer', image: 'customer'],
+  'location'       : [chart: 'location', image: 'location'],
+  'inventory'      : [chart: 'inventory', image: 'inventory'],
+  'media'          : [chart: 'media', image: 'media'],
+  'search'         : [chart: 'search', image: 'search'],
+  'payment'        : [chart: 'payment', image: 'payment'],
+  'payment_paypal' : [chart: 'payment-paypal', image: 'payment-paypal'],
+  'promotion'      : [chart: 'promotion', image: 'promotion'],
+  'recommendation' : [chart: 'recommendation', image: 'recommendation'],
+  'webhook'        : [chart: 'webhook', image: 'webhook'],
+  'storefront'     : [chart: 'storefront-ui', image: 'storefront'],
+  'backoffice'     : [chart: 'backoffice-ui', image: 'backoffice'],
+  'storefront_bff' : [chart: 'storefront-bff', image: 'storefront-bff'],
+  'backoffice_bff' : [chart: 'backoffice-bff', image: 'backoffice-bff']
+]
+
 pipeline {
   agent any
   parameters {
