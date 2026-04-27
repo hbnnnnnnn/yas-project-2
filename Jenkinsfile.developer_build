@@ -79,9 +79,10 @@ pipeline {
             }
 
             sh 'rm -rf gitops'  // clean any previous clone
-            sh '''
-              git clone "https://${GH_USER}:${GH_PASS}@${GITOPS_REPO#https://}" gitops
-            '''
+            sh """
+              CLEAN_URL=\$(echo "${env.GITOPS_REPO}" | sed 's|https://||')
+              git clone "https://\${GH_USER}:\${GH_PASS}@\${CLEAN_URL}" gitops
+            """
 
             dir('gitops') {
               entries.each { svc ->
@@ -97,39 +98,6 @@ pipeline {
               """
             }
           }
-        }
-      }
-    }
-
-    stage('Ensure Minikube') {
-      steps {
-        script {
-          sh '''
-            set +e
-            minikube status >/dev/null 2>&1
-            STATUS_RC=$?
-            set -e
-
-            if [ "$STATUS_RC" -ne 0 ]; then
-              echo "Minikube is not running. Starting Minikube with docker driver..."
-              minikube start --driver=docker --force --wait=all
-            fi
-
-            minikube status
-          '''
-        }
-      }
-    }
-
-    stage('Print access info') {
-      steps {
-        script {
-          def nodeIp = sh(script: 'minikube ip', returnStdout: true).trim()
-          echo "=============================="
-          echo "Add to /etc/hosts:"
-          echo "${nodeIp}  yas.local api.yas.local"
-          echo "ArgoCD syncing - check: minikube service argocd-server -n argocd --url"
-          echo "=============================="
         }
       }
     }
