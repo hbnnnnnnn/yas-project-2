@@ -12,6 +12,16 @@ pipeline {
 
     stages {
 
+        stage('Check Java') {
+            steps {
+                sh '''
+                java -version
+                echo $JAVA_HOME
+                which java
+                '''
+            }
+        }
+
         stage('Checkout') {
             steps {
                 checkout scm
