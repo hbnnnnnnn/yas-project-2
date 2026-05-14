@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: yas-dev
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+  - list:
+      elements:
+      - service: tax
+      - service: product
+      - service: cart
+      - service: order
+      - service: rating
+      - service: customer
+      - service: location
+      - service: inventory
+      - service: media
+      - service: search
+      - service: payment
+      - service: payment-paypal
+      - service: promotion
+      - service: recommendation
+      - service: webhook
+      - service: sampledata
+      - service: storefront-bff
+      - service: backoffice-bff
+      - service: storefront-ui
+      - service: backoffice-ui
+  template:
+    metadata:
+      name: 'yas-dev-{{.service}}'
+    spec:
+      project: default
+      sources:
+      - repoURL: https://github.com/hbnnnnnnn/yas-project-2
+        targetRevision: main
+        path: 'k8s/charts/{{.service}}'
+        helm:
+          valueFiles:
+          - $values/dev/{{.service}}.values.yaml
+      - repoURL: https://github.com/hbnnnnnnn/yas-gitops
+        targetRevision: HEAD
+        ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dev
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
