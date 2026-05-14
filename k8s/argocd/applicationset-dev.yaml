@@ -28,6 +28,7 @@ spec:
       - service: backoffice-bff
       - service: storefront-ui
       - service: backoffice-ui
+      - service: yas-configuration
   template:
     metadata:
       name: 'yas-dev-{{.service}}'
@@ -38,6 +39,11 @@ spec:
         targetRevision: main
         path: 'k8s/charts/{{.service}}'
         helm:
+          parameters:
+          - name: backend.serviceMonitor.enabled
+            value: "false"
+          - name: ui.serviceMonitor.enabled
+            value: "false"
           valueFiles:
           - $values/dev/{{.service}}.values.yaml
       - repoURL: https://github.com/hbnnnnnnn/yas-gitops
