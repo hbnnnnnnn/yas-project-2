@@ -12,22 +12,15 @@ spec:
       - service: product
       - service: cart
       - service: order
-      - service: rating
       - service: customer
-      - service: location
       - service: inventory
       - service: media
       - service: search
-      - service: payment
-      - service: payment-paypal
-      - service: promotion
-      - service: recommendation
-      - service: webhook
-      - service: sampledata
       - service: storefront-bff
       - service: backoffice-bff
       - service: storefront-ui
       - service: backoffice-ui
+      - service: swagger-ui
       - service: yas-configuration
   template:
     metadata:

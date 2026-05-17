@@ -12,22 +12,15 @@ spec:
       - service: product
       - service: cart
       - service: order
-      - service: rating
       - service: customer
-      - service: location
       - service: inventory
       - service: media
       - service: search
-      - service: payment
-      - service: payment-paypal
-      - service: promotion
-      - service: recommendation
-      - service: webhook
-      - service: sampledata
       - service: storefront-bff
       - service: backoffice-bff
       - service: storefront-ui
       - service: backoffice-ui
+      - service: swagger-ui
       - service: yas-configuration
   template:
     metadata:
@@ -44,6 +37,14 @@ spec:
             value: "false"
           - name: ui.serviceMonitor.enabled
             value: "false"
+          - name: backend.readinessProbe.initialDelaySeconds
+            value: "120"
+          - name: backend.readinessProbe.failureThreshold
+            value: "30"
+          - name: backend.livenessProbe.initialDelaySeconds
+            value: "180"
+          - name: backend.livenessProbe.failureThreshold
+            value: "30"
           valueFiles:
           - $values/dev/{{.service}}.values.yaml
       - repoURL: https://github.com/hbnnnnnnn/yas-gitops
