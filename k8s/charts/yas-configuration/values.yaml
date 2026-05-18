@@ -287,9 +287,9 @@ sampledataApplicationConfig:
   spring:
     datasource:
       product:
-        url: jdbc:postgresql://postgresql.postgres:5432/product?sslmode=disable
+        url: jdbc:postgresql://postgresql.postgres:5432/product
       media:
-        url: jdbc:postgresql://postgresql.postgres:5432/media?sslmode=disable
+        url: jdbc:postgresql://postgresql.postgres:5432/media
 
 logbackConfig: |
   <?xml version="1.0" encoding="UTF-8" ?>
