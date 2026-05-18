@@ -9,7 +9,7 @@
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
-
+istio-1.21.0/
 # Package Files #
 *.jar
 *.war

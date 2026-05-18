@@ -154,6 +154,60 @@ pipeline {
         }
     }
 
+        stage('Update GitOps (dev)') {
+            when {
+                allOf {
+                    expression { env.BUILD_REQUIRED == 'true' }
+                    branch 'main'
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-creds',
+                        usernameVariable: 'GH_USER', passwordVariable: 'GH_PASS')]) {
+                    script {
+                        def chartMap = [
+                            'tax'           : 'tax',
+                            'product'       : 'product',
+                            'cart'          : 'cart',
+                            'order'         : 'order',
+                            'customer'      : 'customer',
+                            'inventory'     : 'inventory',
+                            'media'         : 'media',
+                            'search'        : 'search',
+                            'storefront-bff': 'storefront-bff',
+                            'backoffice-bff': 'backoffice-bff',
+                            'storefront'    : 'storefront-ui',
+                            'backoffice'    : 'backoffice-ui',
+                        ]
+                        def builtServices = (env.JAVA_SERVICES?.trim() ? env.JAVA_SERVICES.trim().split('\n').toList() : []) +
+                                            (env.NODE_SERVICES?.trim()  ? env.NODE_SERVICES.trim().split('\n').toList()  : [])
+
+                        sh 'rm -rf yas-gitops'
+                        sh "git clone https://\${GH_USER}:\${GH_PASS}@github.com/hbnnnnnnn/yas-gitops.git yas-gitops"
+                        dir('yas-gitops') {
+                            builtServices.each { entry ->
+                                def svcName = entry.split(':')[0]
+                                def chart   = chartMap[svcName]
+                                if (chart && fileExists("dev/${chart}.values.yaml")) {
+                                    sh "yq e -i '.backend.image.repository = \"${env.DOCKER_HUB_USER}/${svcName}\"' dev/${chart}.values.yaml"
+                                    sh "yq e -i '.backend.image.tag = \"${env.COMMIT_ID}\"' dev/${chart}.values.yaml"
+                                    echo "Updated dev/${chart}.values.yaml → ${env.COMMIT_ID}"
+                                }
+                            }
+                            sh """
+                                git config user.email "jenkins@ci"
+                                git config user.name "Jenkins"
+                                git add dev/
+                                git diff --staged --quiet || git commit -m "ci: update dev tags to ${env.COMMIT_ID} [skip ci]"
+                                git push
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     post {
         success { echo "CI done. Tag: ${env.COMMIT_ID}" }
         failure { echo "CI failed — see logs above." }
