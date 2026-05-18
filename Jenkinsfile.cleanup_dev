@@ -8,7 +8,7 @@ pipeline {
             usernameVariable: 'GH_USER', passwordVariable: 'GH_PASS')]) {
           script {
             sh "rm -rf yas-gitops"
-            sh "git clone https://${GH_USER}:${GH_PASS}@github.com/your-org/yas-gitops.git yas-gitops"
+            sh "git clone https://${GH_USER}:${GH_PASS}@github.com/hbnnnnnnn/yas-gitops.git yas-gitops"
             dir('yas-gitops') {
               // Reset all dev tags back to main
               def services = [
