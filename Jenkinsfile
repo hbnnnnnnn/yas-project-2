@@ -152,7 +152,6 @@ pipeline {
                 }
             }
         }
-    }
 
         stage('Update GitOps (dev)') {
             when {
