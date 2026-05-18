@@ -55,7 +55,7 @@ spec:
             - name: LOGGING_CONFIG
               value: {{ .Values.logbackXmlPath }}
             - name: SPRING_DATASOURCE_URL
-              value: {{ .Values.databaseConnectionUrl }}/{{ .Values.databaseName }}
+              value: {{ .Values.databaseConnectionUrl }}/{{ .Values.databaseName }}?sslmode=disable
             {{- if .Values.extraApplicationConfigPaths }}
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: /opt/yas/config/application.yaml,{{ join "," .Values.extraApplicationConfigPaths }}
