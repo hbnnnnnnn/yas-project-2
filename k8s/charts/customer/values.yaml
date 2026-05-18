@@ -8,6 +8,15 @@ backend:
   databaseName: customer
   ingress:
     enabled: false
+  extraEnvs:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Xmx512m -Xms256m"
+  resources:
+    limits:
+      memory: 700Mi
+    requests:
+      memory: 256Mi
+      cpu: 100m
   extraEnvFroms:
     - secretRef:
         name: yas-keycloak-credentials-secret
@@ -20,3 +29,4 @@ backend:
       mountPath: /opt/yas/customer
   extraApplicationConfigPaths:
     - /opt/yas/customer/customer-application.yaml
+

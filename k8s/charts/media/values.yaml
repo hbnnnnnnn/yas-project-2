@@ -8,6 +8,15 @@ backend:
   databaseName: media
   ingress:
     enabled: false
+  extraEnvs:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Xmx512m -Xms256m"
+  resources:
+    limits:
+      memory: 700Mi
+    requests:
+      memory: 256Mi
+      cpu: 100m
   extraVolumes:
     - name: media-application
       configMap:
@@ -17,4 +26,5 @@ backend:
       mountPath: /opt/yas/media
   extraApplicationConfigPaths:
     - /opt/yas/media/media-application.yaml
+
 

@@ -8,6 +8,15 @@ backend:
   databaseName: cart
   ingress:
     enabled: false
+  extraEnvs:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Xmx512m -Xms256m"
+  resources:
+    limits:
+      memory: 700Mi
+    requests:
+      memory: 256Mi
+      cpu: 100m
   extraVolumes:
     - name: cart-application-config
       configMap:
@@ -17,3 +26,4 @@ backend:
       mountPath: /opt/yas/cart
   extraApplicationConfigPaths:
     - /opt/yas/cart/cart-application.yaml
+
