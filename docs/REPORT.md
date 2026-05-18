@@ -188,13 +188,13 @@ retries:
 
 **Test result:** Envoy proxy stats showed `response_flags.UH: 4` for a single curl call — 1 original attempt + 3 retries = 4 total, confirming retries happened.
 
-### Phase 11: Fix OOMKilled — JVM Heap Cap
+### Phase 11: Fix OOMKilled — JVM Heap Cap for All Services
 
-**Problem:** After minikube resumed from sleep, seven backend services (product, customer, cart, tax, order, inventory, media) were in `CrashLoopBackOff` with exit code `137` (OOMKilled). The Kubernetes node killed each JVM because it was consuming unbounded heap with no container memory limit set.
+**Problem:** After minikube resumed from sleep, seven backend services (product, customer, cart, tax, order, inventory, media) were in `CrashLoopBackOff` with exit code `137` (OOMKilled). The Kafka broker was also OOMKilled. The Kubernetes node killed each JVM because it was consuming unbounded heap with no container memory limit set.
 
 **What we changed:**
 
-For all seven services, added to `k8s/charts/<service>/values.yaml`:
+For all seven Spring Boot services, added to `k8s/charts/<service>/values.yaml`:
 ```yaml
 extraEnvs:
   - name: JAVA_TOOL_OPTIONS
@@ -207,7 +207,19 @@ resources:
     cpu: 100m
 ```
 
-**Why:** Spring Boot JVM starts small but grows the heap on demand. On a minikube node with limited RAM shared by 13 services + infrastructure, without a heap ceiling the JVM keeps growing until the OOM killer terminates it. `-Xmx512m` caps the heap; the 700Mi container limit gives a buffer above that cap for JVM overhead (metaspace, thread stacks, etc.).
+For the Kafka broker, added to the `KafkaNodePool` spec in `k8s/deploy/kafka/kafka-cluster/templates/kafka-cluster.yaml`:
+```yaml
+resources:
+  requests:
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+jvmOptions:
+  -Xms: 256m
+  -Xmx: 512m
+```
+
+**Why:** Spring Boot and Kafka JVMs start small but grow the heap on demand. On a minikube node with limited RAM shared by 13 services + all infrastructure, without a heap ceiling the JVM keeps growing until the Linux OOM killer terminates the process. `-Xmx512m` caps the heap; the container limit gives a buffer above that for JVM overhead (metaspace, thread stacks, native memory, etc.).
 
 ### Phase 12: Fix Search Service — Rebuild Image
 
@@ -258,6 +270,7 @@ Caused by: co.elastic.clients.transport.TransportException:
 | DestinationRule conflicting | ISTIO_MUTUAL conflicts with auto-mTLS in Istio 1.5+ | Deleted DestinationRule, relying on auto-mTLS |
 | minikube NodePort unreachable | Docker driver doesn't expose NodePorts | Used `kubectl port-forward` instead |
 | Backend services OOMKilled | JVM heap unbounded on memory-constrained minikube node | Added `JAVA_TOOL_OPTIONS=-Xmx512m -Xms256m` and 700Mi limit to all backend services |
+| Kafka broker OOMKilled | No JVM heap cap on the Strimzi KafkaNodePool | Added `jvmOptions: -Xms256m -Xmx512m` and `resources.limits.memory: 1Gi` to `KafkaNodePool` spec |
 | search CrashLoopBackOff | Bug in `co.elastic.clients` elasticsearch-java client — tries to read a body from a HEAD response (which HTTP forbids). Crash happens in `SimpleElasticsearchRepository.createIndexAndMappingIfNeeded()` before application starts | Rebuilt search image from source with `@Document(indexName = "product", createIndex = false)` to skip the buggy `indices.exists()` call. Pre-created `product` index in Elasticsearch. Published as `hbnhbn/search:fixed` |
 
 ---
